@@ -5,7 +5,7 @@ from torchvision import datasets,transforms
 from torch.utils.data import DataLoader
 from dataset import DummyYOLODataset
 from torch.nn import Sequential,Conv2d,LeakyReLU,Linear,MaxPool2d,AdaptiveAvgPool2d,Flatten,Dropout
-from bbox_utils import xywh_to_xyxy,iou
+from bbox_utils import xywh_to_xyxy,iou,bbox_coordinate_format
 
 pretraining_transforms=transforms.Compose([
     transforms.Resize((448,448)),
@@ -150,13 +150,13 @@ for images,labels in pretraining_loader:
 dummy_dataset = DummyYOLODataset(size=500)
 val_dataset = DummyYOLODataset()
 
-train_loader = DataLoader(dummy_dataset, batch_size=32, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+train_loader = DataLoader(dummy_dataset, batch_size=64, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
 
 
 for imgs, tgts in train_loader:
-    print(imgs.shape)   # [32, 3, 448, 448]
-    print(tgts.shape)   # [32, 7, 7, 30]
+    print(imgs.shape)   # [64, 3, 448, 448]
+    print(tgts.shape)   # [64, 7, 7, 30]
     break  
 
 
@@ -280,9 +280,77 @@ class YOLO(torch.nn.Module):
                     val_targets = val_targets.to(device)
                     val_preds = self.forward(val_images)
                     val_loss += self.loss(val_preds, val_targets)
+                    
+                val_loss/=len(validation_loader)
                 print(f"validation loss for epoch {epoch} is {val_loss}")
+    
 
+    def predict(self,image,device,confidence_threshold=0.2):
+        inference_transforms=transforms.Compose([
+            transforms.Resize((448,448)),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))
+        ])
+
+        image=inference_transforms(image)
+        image=torch.unsqueeze(image,0)  # Adding a batch dimension
+        image=image.to(device)
+
+        with torch.no_grad():
+            self.eval()
+            prediction=self.forward(image)
+            final_preds=[]
+            
+            for grid_x in range(7):
+                for grid_y in range(7):
+                    # bbox_x,bbox_y,bbox_w,bbox_h,bbox_confidence
+
+                    pred_cell=prediction[0,grid_x,grid_y]
+
+                    bbox_1=pred_cell[0:5]
+                    bbox_2=pred_cell[5:10]
+
+                    class_probs=pred_cell[10:30]
+
+                    bbox1_class_scores=class_probs*bbox_1[4]
+                    bbox2_class_scores=class_probs*bbox_2[4]
+
+                    score1, label1 = torch.max(bbox1_class_scores, dim=0) #This is to get the best class
+                    score2, label2 = torch.max(bbox2_class_scores, dim=0)
+
+
+                    if score1>confidence_threshold:
+                        final_preds.append({"bbox":bbox_1,"score":score1.item(),"label":label1.item()})
+
+                    if score2>confidence_threshold:
+                        final_preds.append({"bbox":bbox_2,"score":score2.item(),"label":label2.item()})
+
+            final_preds.sort(key=lambda x:x["score"],reverse=True) # Sorting by score
+            
+            preds_nms=[]
+            
+
+            for i,pred1 in enumerate(final_preds):
+                discard=False
+
+                for selected in preds_nms:
+                    if iou(pred1["bbox"],selected["bbox"])>0.5: #This means they are both considered to represent the same "box" and since we had sorted in decreasing order of score so we already have the better box
+                            discard=True
+                            break
+                
+                if discard==False:
+                    preds_nms.append(pred1)
+
+            output=[]
+
+            for pred in preds_nms:
+                pred["bbox"]=bbox_coordinate_format(pred["bbox"])
+                output.append(pred)
+
+            return output
+
+
+        
 yolo=YOLO(pretrained_network=yolo_pretrain.feature_extractor)
 yolo.to(device)
 
-yolo.train_model(1,train_loader=train_loader,validation_loader=val_loader,device=device)

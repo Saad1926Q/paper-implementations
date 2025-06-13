@@ -1,18 +1,3 @@
-def xywh_to_xyxy(bbox):
-    """
-    Converting bbox from xywh format to xyxy format(easier to calculate iou using this)
-    Saw smth like this in the source code of DEEPSORT just some days back
-    """
-    bbox_x,bbox_y,bbox_w,bbox_h,bbox_confidence=bbox
-
-    x_max=bbox_x+(bbox_w/2)
-    x_min=bbox_x-(bbox_w/2)
-    y_max=bbox_y+(bbox_h/2)
-    y_min=bbox_y-(bbox_h/2)
-
-    return x_min,y_min,x_max,y_max
-
-
 def iou(bbox_predicted,bbox_actual):
 
     """
@@ -21,8 +6,8 @@ def iou(bbox_predicted,bbox_actual):
     is that as we move downwards value of y increases(which is the opposite of how we normally percieve y values)
 
     """
-    x_min_predicted,y_min_predicted,x_max_predicted,y_max_predicted=xywh_to_xyxy(bbox_predicted)
-    x_min_actual,y_min_actual,x_max_actual,y_max_actual=xywh_to_xyxy(bbox_actual)
+    x_min_predicted,y_min_predicted,x_max_predicted,y_max_predicted=bbox_coordinate_format(bbox_predicted)
+    x_min_actual,y_min_actual,x_max_actual,y_max_actual=bbox_coordinate_format(bbox_actual)
 
     x_intersection_right=min(x_max_actual,x_max_predicted)
     x_intersection_left=max(x_min_actual,x_min_predicted)
@@ -52,10 +37,38 @@ def iou(bbox_predicted,bbox_actual):
         iou=area_inter/area_union
         return iou
 
+def bbox_coordinate_format(bbox):
+    """
+    So basically the bbox coordinate predicted by the model are bw 0 and 1
+
+    eg x = 0.5 means  box is centered horizontally at the middle of the image 
+    y = 0.5 means box is centered vertically at the middle
+    w = 0.2 means the box takes up 20% of the image width
+    h = 0.3 means the box takes up 30% of image height
+
+    This fn maps these values to the actual bbox coordinates in the image
+    """
+    
+    img_width, img_height = 448, 448
+
+    x,y,w,h,_=bbox
+
+    x_center = x * img_width
+    y_center = y * img_height
+    box_width = w * img_width
+    box_height = h * img_height
+
+    x1 = x_center - box_width / 2
+    y1 = y_center - box_height / 2
+    x2 = x_center + box_width / 2
+    y2 = y_center + box_height / 2
+
+    return x1.item(),y1.item(),x2.item(),y2.item()
+
 #Test
 
-box1 = [50, 50, 40, 40, 1.0]  
-box2 = [50, 50, 20, 20, 1.0] 
+box1 = [0.5, 0.5, 0.3, 0.3, 1.0]  # Centered box taking 30% width/height
+box2 = [0.5, 0.5, 0.2, 0.2, 1.0]  # Smaller box in center
 
 
-# print("IoU:", iou(box1, box2)) 
+

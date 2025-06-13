@@ -35,6 +35,6 @@ class DummyYOLODataset(Dataset):
 
             class_idx = random.randint(0,self.C-1)  #Choosing a random class
 
-            target[i, j, self.B * 5 + class_idx] = 1.0  # So we are saying probability for this class is 0 whereas for others it is 0
+            target[i, j, self.B * 5 + class_idx] = 1.0  # So we are saying probability for this class is 1 whereas for others it is 0
 
         return image,target
