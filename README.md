@@ -12,6 +12,7 @@ Most implementations are in PyTorch.
 3. [VGG16](https://arxiv.org/abs/1409.1556)  
 4. [ResNet34](https://arxiv.org/abs/1512.03385)
 5. [YOLOv1](https://arxiv.org/pdf/1506.02640)
+6. [ClipCap](https://arxiv.org/abs/2111.09734)
 
 I post ML-related stuff on my [Twitter](https://x.com/sodakeyEatsMush) .
 
